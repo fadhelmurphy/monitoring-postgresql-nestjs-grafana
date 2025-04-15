@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: monitoring
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: -c config_file=/etc/postgresql/postgresql.conf
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nestjs:
+    build: ./nestjs-app
+    container_name: nestjs-app
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/monitoring
+    volumes:
+      - ./nestjs-app:/usr/src/app
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
+  grafana-storage:
